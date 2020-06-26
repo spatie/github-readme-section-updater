@@ -64,6 +64,8 @@ function updateReadme(repoInfo, repoURL) {
     return new Promise(async (resolve) => {
         try {
             let response;
+
+            // README.md vs readme.md
             let filename = 'README.md';
             try {
                 response = await octokit.repos.getContents({ ...repoInfo, path: 'README.md' });
@@ -96,12 +98,13 @@ function updateReadme(repoInfo, repoURL) {
             } catch (error) {
                 if (error.message.includes('archived')) {
                     console.log('skipped', repoInfo.repo, 'because it is read-only');
+                } else if (error.message.includes('repository is empty')) {
+                    console.log('skipped', repoInfo.repo, 'because it is empty');
                 } else {
                     throw error;
                 }
             }
         } catch (error) {
-            // could be that the readme file doesn't exist, continue to the next repo
             console.log('something went wrong while updating', repoInfo.repo);
             console.log(error);
         }
