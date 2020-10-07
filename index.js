@@ -60,37 +60,78 @@ function addNewSupportSection(readme) {
     return readmeWithNewSupportUsSection;
 }
 
+function checkIfPatreonSectionStillExists(readme, repoName, repoURL) {
+    if (readme.includes('patreon') || readme.includes('Patreon') || readme.includes('https://www.patreon.com/spatie')) {
+        console.log(repoName, 'still has a Patreon block.', repoURL);
+    }
+}
+
+function replaceImageAndRemoveCopy(readme, repoName) {
+    if (readme.includes('https://spatie.be/github-ad-click')) {
+        console.log(repoName, 'was already updated');
+
+        return { shouldUpdate: false };
+    }
+
+    if (!readme.includes('[![Laravel Package training]')) {
+        console.log(repoName, 'does not have the laravel-package-training image');
+
+        return { shouldUpdate: false };
+    }
+
+    let updatedReadme = readme;
+
+    const indexStartRemove = updatedReadme.indexOf(
+        'Learn how to create a package like this one, by watching our premium video course'
+    );
+    const indexImage = updatedReadme.indexOf('(https://laravelpackage.training)', indexStartRemove);
+    const indexEndRemove = updatedReadme.indexOf('\n', indexImage);
+
+    updatedReadme =
+        updatedReadme.substr(0, indexStartRemove) +
+        `[![Image](https://github-ads.s3.eu-central-1.amazonaws.com/${repoName}.jpg)](https://spatie.be/github-ad-click/${repoName})` +
+        updatedReadme.substr(indexEndRemove);
+
+    return { updatedReadme, shouldUpdate: true };
+}
+
 function updateReadme(repoInfo, repoURL) {
     return new Promise(async (resolve) => {
         try {
             let response;
 
             // README.md vs readme.md
-            let filename = 'README.md';
+            let filename = 'readme.md';
             try {
-                response = await octokit.repos.getContents({ ...repoInfo, path: 'README.md' });
+                response = await octokit.repos.getContents({ ...repoInfo, path: filename });
             } catch (error) {
                 if (error.message === 'Not Found') {
-                    response = await octokit.repos.getContents({ ...repoInfo, path: 'readme.md' });
-                    filename = 'readme.md';
+                    filename = 'README.md';
+                    response = await octokit.repos.getContents({ ...repoInfo, path: filename });
                 }
             }
 
             let readme = Buffer.from(response.data.content, 'base64').toString();
 
-            readme = removeSupportSection(readme);
-            readme = addNewSupportSection(readme);
+            checkIfPatreonSectionStillExists(readme, repoInfo.repo, repoURL);
+
+            let { updatedReadme, shouldUpdate } = replaceImageAndRemoveCopy(readme, repoInfo.repo);
+
+            if (!shouldUpdate) {
+                console.log('skipped', repoInfo.repo, repoURL);
+                return resolve();
+            }
 
             // Because of the different cases, sometimes there will be triple newlines, which we don't want
-            readme = readme.replace(/(\n{3,})\#/g, '\n\n#');
-            readme = readme.replace(/(\n{2,})$/g, '\n');
+            updatedReadme = updatedReadme.replace(/(\n{3,})\#/g, '\n\n#');
+            updatedReadme = updatedReadme.replace(/(\n{2,})$/g, '\n');
 
             try {
                 await octokit.repos.createOrUpdateFile({
                     ...repoInfo,
                     path: filename,
                     message: 'Update README with new "Support us" section',
-                    content: Buffer.from(readme).toString('base64'),
+                    content: Buffer.from(updatedReadme).toString('base64'),
                     sha: response.data.sha,
                 });
 
@@ -105,7 +146,7 @@ function updateReadme(repoInfo, repoURL) {
                 }
             }
         } catch (error) {
-            console.log('something went wrong while updating', repoInfo.repo);
+            console.log('something went wrong while updating', repoInfo.repo, repoURL);
             console.log(error);
         }
 
