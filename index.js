@@ -66,31 +66,25 @@ function checkIfPatreonSectionStillExists(readme, repoName, repoURL) {
     }
 }
 
-function replaceImageAndRemoveCopy(readme, repoName) {
-    if (readme.includes('https://spatie.be/github-ad-click')) {
+function replaceImgTag(readme, repoName) {
+    if (readme.includes('<img src="https://github-ads.s3.eu-central-1.amazonaws.com')) {
         console.log(repoName, 'was already updated');
 
         return { shouldUpdate: false };
     }
 
-    if (!readme.includes('[![Laravel Package training]')) {
-        console.log(repoName, 'does not have the laravel-package-training image');
+    if (!readme.includes('[![Image](https://github-ads.s3.eu-central-1.amazonaws.com')) {
+        console.log(repoName, 'does not have the ad image');
 
         return { shouldUpdate: false };
     }
 
     let updatedReadme = readme;
 
-    const indexStartRemove = updatedReadme.indexOf(
-        'Learn how to create a package like this one, by watching our premium video course'
+    updatedReadme = updatedReadme.replace(
+        `![Image](https://github-ads.s3.eu-central-1.amazonaws.com/${repoName.replace('.', '')}.jpg)`,
+        `<img src="https://github-ads.s3.eu-central-1.amazonaws.com/${repoName.replace('.', '')}.jpg?t=1" width="419px" />`
     );
-    const indexImage = updatedReadme.indexOf('(https://laravelpackage.training)', indexStartRemove);
-    const indexEndRemove = updatedReadme.indexOf('\n', indexImage);
-
-    updatedReadme =
-        updatedReadme.substr(0, indexStartRemove) +
-        `[![Image](https://github-ads.s3.eu-central-1.amazonaws.com/${repoName}.jpg)](https://spatie.be/github-ad-click/${repoName})` +
-        updatedReadme.substr(indexEndRemove);
 
     return { updatedReadme, shouldUpdate: true };
 }
@@ -115,7 +109,7 @@ function updateReadme(repoInfo, repoURL) {
 
             checkIfPatreonSectionStillExists(readme, repoInfo.repo, repoURL);
 
-            let { updatedReadme, shouldUpdate } = replaceImageAndRemoveCopy(readme, repoInfo.repo);
+            let { updatedReadme, shouldUpdate } = replaceImgTag(readme, repoInfo.repo);
 
             if (!shouldUpdate) {
                 console.log('skipped', repoInfo.repo, repoURL);
@@ -130,7 +124,7 @@ function updateReadme(repoInfo, repoURL) {
                 await octokit.repos.createOrUpdateFile({
                     ...repoInfo,
                     path: filename,
-                    message: 'Update README with new "Support us" section',
+                    message: 'Update README img tag',
                     content: Buffer.from(updatedReadme).toString('base64'),
                     sha: response.data.sha,
                 });
