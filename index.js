@@ -1,14 +1,15 @@
 const { Octokit } = require('@octokit/rest');
 require('dotenv').config();
-const { newSupportSection } = require('./copy');
+const { workflowCode } = require('./copy');
 
-const octokit = new Octokit({ auth: process.env.GITHUB_API_KEY });
+const octokit = new Octokit({ auth: process.env.GITHUB_API_KEY, userAgent: 'spatie-update-script' });
 
 function getAllPublicRepoNames(page = 1) {
     return new Promise((resolve) => {
         octokit.repos.listForOrg({ org: 'spatie', per_page: 100, page }).then(async (response) => {
             let publicRepos = response.data
                 .filter((repo) => !repo.private)
+                .filter((repo) => repo.default_branch === 'main') // only where default branch === 'main'
                 .map((r) => ({ name: r.name, html_url: r.html_url }));
 
             if (response.data.length === 100) {
@@ -21,115 +22,36 @@ function getAllPublicRepoNames(page = 1) {
     });
 }
 
-function removeSupportSection(readme) {
-    const indexOfSupportUsSection = readme.indexOf('## Support us');
+const workflowPath = '.github/workflows/update-changelog.yml';
 
-    if (indexOfSupportUsSection === -1) {
-        return readme;
-    }
-
-    let indexOfNextSection;
-
-    const nextBigSectionIndex = readme.indexOf('\n# ', indexOfSupportUsSection + 1);
-    const nextMedSectionIndex = readme.indexOf('\n## ', indexOfSupportUsSection + 1);
-
-    if (nextBigSectionIndex === -1 && nextMedSectionIndex === -1) {
-        // No next section, remove until end of file
-        indexOfNextSection = readme.length - 1;
-    }
-    if (nextBigSectionIndex === -1 && nextMedSectionIndex !== -1) {
-        indexOfNextSection = nextMedSectionIndex;
-    }
-    if (nextBigSectionIndex !== -1 && nextMedSectionIndex === -1) {
-        indexOfNextSection = nextBigSectionIndex;
-    }
-
-    return readme.substr(0, indexOfSupportUsSection) + readme.substr(indexOfNextSection);
-}
-
-function addNewSupportSection(readme) {
-    let indexToPlaceSupportSection = readme.indexOf('\n##');
-
-    if (indexToPlaceSupportSection === -1) {
-        indexToPlaceSupportSection = readme.length - 1;
-    }
-
-    const readmeWithNewSupportUsSection =
-        readme.substr(0, indexToPlaceSupportSection) + newSupportSection + readme.substr(indexToPlaceSupportSection);
-
-    return readmeWithNewSupportUsSection;
-}
-
-function checkIfPatreonSectionStillExists(readme, repoName, repoURL) {
-    if (readme.includes('patreon') || readme.includes('Patreon') || readme.includes('https://www.patreon.com/spatie')) {
-        console.log(repoName, 'still has a Patreon block.', repoURL);
-    }
-}
-
-function replaceImgTag(readme, repoName) {
-    if (readme.includes('<img src="https://github-ads.s3.eu-central-1.amazonaws.com')) {
-        console.log(repoName, 'was already updated');
-
-        return { shouldUpdate: false };
-    }
-
-    if (!readme.includes('[![Image](https://github-ads.s3.eu-central-1.amazonaws.com')) {
-        console.log(repoName, 'does not have the ad image');
-
-        return { shouldUpdate: false };
-    }
-
-    let updatedReadme = readme;
-
-    updatedReadme = updatedReadme.replace(
-        `![Image](https://github-ads.s3.eu-central-1.amazonaws.com/${repoName.replace('.', '')}.jpg)`,
-        `<img src="https://github-ads.s3.eu-central-1.amazonaws.com/${repoName.replace('.', '')}.jpg?t=1" width="419px" />`
-    );
-
-    return { updatedReadme, shouldUpdate: true };
-}
-
-function updateReadme(repoInfo, repoURL) {
+function addWorkflowScript(repoInfo, repoURL) {
     return new Promise(async (resolve) => {
         try {
             let response;
 
-            // README.md vs readme.md
-            let filename = 'readme.md';
+            // already done?
             try {
-                response = await octokit.repos.getContents({ ...repoInfo, path: filename });
-            } catch (error) {
-                if (error.message === 'Not Found') {
-                    filename = 'README.md';
-                    response = await octokit.repos.getContents({ ...repoInfo, path: filename });
-                }
-            }
+                response = await octokit.repos.getContents({ ...repoInfo, path: workflowPath });
 
-            let readme = Buffer.from(response.data.content, 'base64').toString();
-
-            checkIfPatreonSectionStillExists(readme, repoInfo.repo, repoURL);
-
-            let { updatedReadme, shouldUpdate } = replaceImgTag(readme, repoInfo.repo);
-
-            if (!shouldUpdate) {
-                console.log('skipped', repoInfo.repo, repoURL);
+                // workflow exists, bail
+                console.log(`${repoInfo.repo}: Workflow already exists, continuing. (${repoURL})`);
                 return resolve();
+            } catch (error) {
+                // workflow doesn't exist yet, continue
             }
 
-            // Because of the different cases, sometimes there will be triple newlines, which we don't want
-            updatedReadme = updatedReadme.replace(/(\n{3,})\#/g, '\n\n#');
-            updatedReadme = updatedReadme.replace(/(\n{2,})$/g, '\n');
+            console.log(`${repoInfo.repo}: Adding script… (${repoURL})`);
 
             try {
-                await octokit.repos.createOrUpdateFile({
+                await octokit.repos.createOrUpdateFileContents({
                     ...repoInfo,
-                    path: filename,
-                    message: 'Update README img tag',
-                    content: Buffer.from(updatedReadme).toString('base64'),
-                    sha: response.data.sha,
+                    path: workflowPath,
+                    message: 'Add changelog workflow (automated commit)',
+                    content: workflowCode,
+                    sha: response ? response.data.sha : undefined,
                 });
 
-                console.log('updated', repoURL);
+                console.log(repoURL, 'updated');
             } catch (error) {
                 if (error.message.includes('archived')) {
                     console.log('skipped', repoInfo.repo, 'because it is read-only');
@@ -186,23 +108,17 @@ getAllPublicRepoNames().then((allRepos) => {
 
             console.log('updating', currRepo.name, currRepo.html_url);
 
-            await updateReadme({ owner: 'spatie', repo: currRepo.name }, currRepo.html_url);
+            try {
+                // check if repo has a .github dir
+                await octokit.repos.getContent({ owner: 'spatie', repo: currRepo.name, path: '.github' });
+            } catch (error) {
+                console.log(`Skipping ${currRepo.name}, it has no .github directory. (${currRepo.html_url})`);
+                return resolve();
+            }
+
+            await addWorkflowScript({ owner: 'spatie', repo: currRepo.name }, currRepo.html_url);
 
             resolve();
         });
     }, Promise.resolve());
 });
-
-/* [
-    { name: 'github-api-tester', html_url: 'https://github.com/AdrianMrn/github-api-tester/blob/master/README.md' },
-].reduce((prev, currRepo) => {
-    return new Promise(async (resolve) => {
-        await prev;
-
-        console.log('updating', currRepo.name, currRepo.html_url);
-
-        await updateReadme({ owner: 'AdrianMrn', repo: currRepo.name });
-
-        resolve();
-    });
-}, Promise.resolve()); */

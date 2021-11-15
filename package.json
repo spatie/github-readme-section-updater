@@ -4,7 +4,7 @@
     "main": "index.js",
     "license": "MIT",
     "dependencies": {
-        "@octokit/rest": "^17.9.2",
+        "@octokit/rest": "^18.12.0",
         "dotenv": "^8.2.0"
     }
 }

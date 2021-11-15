@@ -1,15 +1,33 @@
-const newSupportSection = `
+const workflowCode = Buffer.from(
+    `name: "Update Changelog"
 
-## Support us
+on:
+  release:
+    types: [released]
 
-Learn how to create a package like this one, by watching our premium video course:
+jobs:
+  update:
+    runs-on: ubuntu-latest
 
-[![Laravel Package training](https://spatie.be/github/package-training.jpg)](https://laravelpackage.training)
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          ref: main
 
-We invest a lot of resources into creating [best in class open source packages](https://spatie.be/open-source). You can support us by [buying one of our paid products](https://spatie.be/open-source/support-us).
+      - name: Update Changelog
+        uses: stefanzweifel/changelog-updater-action@v1
+        with:
+          latest-version: \${{ github.event.release.name }}
+          release-notes: \${{ github.event.release.body }}
 
-We highly appreciate you sending us a postcard from your hometown, mentioning which of our package(s) you are using. You'll find our address on [our contact page](https://spatie.be/about-us). We publish all received postcards on [our virtual postcard wall](https://spatie.be/open-source/postcards).
+      - name: Commit updated CHANGELOG
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          branch: main
+          commit_message: Update CHANGELOG
+          file_pattern: CHANGELOG.md
+`
+).toString('base64');
 
-`;
-
-module.exports = { newSupportSection };
+module.exports = { workflowCode };
