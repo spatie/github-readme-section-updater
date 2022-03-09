@@ -1,6 +1,6 @@
 const { Octokit } = require('@octokit/rest');
 require('dotenv').config();
-const { newSupportSection } = require('./copy');
+const { newCopy } = require('./copy');
 
 const octokit = new Octokit({ auth: process.env.GITHUB_API_KEY });
 
@@ -21,45 +21,6 @@ function getAllPublicRepoNames(page = 1) {
     });
 }
 
-function removeSupportSection(readme) {
-    const indexOfSupportUsSection = readme.indexOf('## Support us');
-
-    if (indexOfSupportUsSection === -1) {
-        return readme;
-    }
-
-    let indexOfNextSection;
-
-    const nextBigSectionIndex = readme.indexOf('\n# ', indexOfSupportUsSection + 1);
-    const nextMedSectionIndex = readme.indexOf('\n## ', indexOfSupportUsSection + 1);
-
-    if (nextBigSectionIndex === -1 && nextMedSectionIndex === -1) {
-        // No next section, remove until end of file
-        indexOfNextSection = readme.length - 1;
-    }
-    if (nextBigSectionIndex === -1 && nextMedSectionIndex !== -1) {
-        indexOfNextSection = nextMedSectionIndex;
-    }
-    if (nextBigSectionIndex !== -1 && nextMedSectionIndex === -1) {
-        indexOfNextSection = nextBigSectionIndex;
-    }
-
-    return readme.substr(0, indexOfSupportUsSection) + readme.substr(indexOfNextSection);
-}
-
-function addNewSupportSection(readme) {
-    let indexToPlaceSupportSection = readme.indexOf('\n##');
-
-    if (indexToPlaceSupportSection === -1) {
-        indexToPlaceSupportSection = readme.length - 1;
-    }
-
-    const readmeWithNewSupportUsSection =
-        readme.substr(0, indexToPlaceSupportSection) + newSupportSection + readme.substr(indexToPlaceSupportSection);
-
-    return readmeWithNewSupportUsSection;
-}
-
 function updateReadme(repoInfo, repoURL) {
     return new Promise(async (resolve) => {
         try {
@@ -78,18 +39,18 @@ function updateReadme(repoInfo, repoURL) {
 
             let readme = Buffer.from(response.data.content, 'base64').toString();
 
-            readme = removeSupportSection(readme);
-            readme = addNewSupportSection(readme);
+            if (readme.includes('https://supportukrainenow.org')) {
+                console.log('skipped', repoURL, 'because it was already updated.');
+                return;
+            }
 
-            // Because of the different cases, sometimes there will be triple newlines, which we don't want
-            readme = readme.replace(/(\n{3,})\#/g, '\n\n#');
-            readme = readme.replace(/(\n{2,})$/g, '\n');
+            readme = newCopy + readme;
 
             try {
                 await octokit.repos.createOrUpdateFile({
                     ...repoInfo,
                     path: filename,
-                    message: 'Update README with new "Support us" section',
+                    message: 'Add banner',
                     content: Buffer.from(readme).toString('base64'),
                     sha: response.data.sha,
                 });
@@ -114,13 +75,13 @@ function updateReadme(repoInfo, repoURL) {
 }
 
 let runAll = false;
-function askUserInput() {
+function askUserInput(nextRepoName) {
     return new Promise((resolve) => {
         if (runAll) {
             return resolve();
         }
 
-        console.log('\nPress "a" to edit all repos, press "c" to exit, press any other key to step to the next repo\n');
+        console.log(`\nPress "a" to edit all repos, press "c" to exit, press any other key to step to the next repo (${nextRepoName})\n`);
 
         process.stdin.setRawMode(true);
         process.stdin.resume();
@@ -147,7 +108,7 @@ getAllPublicRepoNames().then((allRepos) => {
         return new Promise(async (resolve) => {
             await prev;
 
-            await askUserInput();
+            await askUserInput(currRepo.name);
 
             console.log('updating', currRepo.name, currRepo.html_url);
 
@@ -157,17 +118,3 @@ getAllPublicRepoNames().then((allRepos) => {
         });
     }, Promise.resolve());
 });
-
-/* [
-    { name: 'github-api-tester', html_url: 'https://github.com/AdrianMrn/github-api-tester/blob/master/README.md' },
-].reduce((prev, currRepo) => {
-    return new Promise(async (resolve) => {
-        await prev;
-
-        console.log('updating', currRepo.name, currRepo.html_url);
-
-        await updateReadme({ owner: 'AdrianMrn', repo: currRepo.name });
-
-        resolve();
-    });
-}, Promise.resolve()); */
