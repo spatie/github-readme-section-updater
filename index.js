@@ -39,18 +39,18 @@ function updateReadme(repoInfo, repoURL) {
 
             let readme = Buffer.from(response.data.content, 'base64').toString();
 
-            if (readme.includes('https://supportukrainenow.org')) {
-                console.log('skipped', repoURL, 'because it was already updated.');
+            if (readme.includes(newCopy)) {
+                readme = readme.replace(newCopy, '');
+            } else {
+                console.log('skipped', repoURL, 'because it did not have the copy.');
                 return;
             }
-
-            readme = newCopy + readme;
 
             try {
                 await octokit.repos.createOrUpdateFile({
                     ...repoInfo,
                     path: filename,
-                    message: 'Add banner',
+                    message: 'Remove banner',
                     content: Buffer.from(readme).toString('base64'),
                     sha: response.data.sha,
                 });
