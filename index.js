@@ -36,8 +36,16 @@ function updateReadme(repoInfo, repoURL) {
                     } catch (error) {
                         if (error.message.includes('Not Found')) {
                             return resolve();
+                        } else {
+                            throw error;
                         }
                     }
+                } else {
+                    if (error.message.includes('is empty')) {
+                        console.log('skipped', repoURL, 'because it is empty.');
+                        return resolve();
+                    }
+                    throw error;
                 }
             }
 
@@ -182,17 +190,17 @@ function askUserInput(nextRepoName) {
     });
 }
 
-getAllPublicRepoNames(3).then((allRepos) => {
+getAllPublicRepoNames().then((allRepos) => {
     allRepos.reduce((prev, currRepo) => {
         return new Promise(async (resolve) => {
             await prev;
 
             await askUserInput(currRepo.name);
 
-            console.log('updating', currRepo.name, currRepo.html_url);
+            /* console.log('updating', currRepo.name, currRepo.html_url); */
 
-            /* await updateReadme({ owner: 'spatie', repo: currRepo.name }, currRepo.html_url); */
-            await removeAllFiles({ owner: 'spatie', repo: currRepo.name }, currRepo.html_url);
+            await updateReadme({ owner: 'spatie', repo: currRepo.name }, currRepo.html_url);
+            /* await removeAllFiles({ owner: 'spatie', repo: currRepo.name }, currRepo.html_url); */
 
             resolve();
         });
