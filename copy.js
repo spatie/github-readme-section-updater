@@ -1,9 +1,9 @@
 const newCopy =
-    "If you've found a bug regarding security please mail [security@spatie.be](mailto:security@spatie.be) instead of using the issue tracker.";
+    "Please see [CONTRIBUTING](https://github.com/spatie/.github/blob/main/CONTRIBUTING.md) for details.";
 
 const oldCopies = [
-    "If you've found a bug regarding security please mail [freek@spatie.be](mailto:freek@spatie.be) instead of using the issue tracker.",
-    'If you discover any security related issues, please email freek@spatie.be instead of using the issue tracker.',
+    "Please see [CONTRIBUTING](CONTRIBUTING.md) for details.",
+    "Please see [CONTRIBUTING](.github/CONTRIBUTING.md) for details.",
 ];
 
 module.exports = { newCopy, oldCopies };

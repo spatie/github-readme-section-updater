@@ -29,9 +29,15 @@ function updateReadme(repoInfo, repoURL) {
             try {
                 response = await octokit.repos.getContents({ ...repoInfo, path: 'README.md' });
             } catch (error) {
-                if (error.message === 'Not Found') {
-                    response = await octokit.repos.getContents({ ...repoInfo, path: 'readme.md' });
-                    filename = 'readme.md';
+                if (error.message.includes('Not Found')) {
+                    try {
+                        response = await octokit.repos.getContents({ ...repoInfo, path: 'readme.md' });
+                        filename = 'readme.md';
+                    } catch (error) {
+                        if (error.message.includes('Not Found')) {
+                            return resolve();
+                        }
+                    }
                 }
             }
 
@@ -91,13 +97,9 @@ const filesToRemove = [
 function removeAllFiles(repoInfo, repoURL) {
     return new Promise(async (resolve) => {
         try {
-            filesToRemove.reduce((prev, currFile) => {
-                return new Promise(async (resolve) => {
-                    await prev;
-                    await removeFile(repoInfo, currFile);
-                    resolve();
-                });
-            }, Promise.resolve());
+            for (const file of filesToRemove) {
+                await removeFile(repoInfo, file);
+            }
         } catch (error) {
             console.log('something went wrong while updating', repoInfo.repo, repoURL);
             console.log(error);
@@ -111,6 +113,8 @@ function removeFile(repoInfo, path) {
     return new Promise(async (resolve) => {
         try {
             let response;
+
+            console.log('removing file', path, 'in', repoInfo.repo);
 
             try {
                 response = await octokit.repos.getContents({ ...repoInfo, path });
@@ -178,7 +182,7 @@ function askUserInput(nextRepoName) {
     });
 }
 
-getAllPublicRepoNames().then((allRepos) => {
+getAllPublicRepoNames(3).then((allRepos) => {
     allRepos.reduce((prev, currRepo) => {
         return new Promise(async (resolve) => {
             await prev;
